@@ -474,7 +474,7 @@
                 leaderboardHTML += `
                     <tr onclick="searchPlayerByName('${player.replace(/'/g, "\\'")}')" ${rowStyle}>
                         <td style="width: 80px; text-align: center;">${index + 1}</td>
-                        <td style="width: 220px;">${player}</td>
+                        <td style="width: 200px;">${player}</td>
                         <td style="text-align: center;">${formatNumber(data.totalRuns)}</td>
                         <td style="text-align: center;">${formatNumber(data.completedRuns || 0)}</td>
                         <td>Level ${data.highestFloor} <span style="color: #FFFFFF; opacity: 0.6; font-size: 0.85em;">(${maxHeight.toFixed(1)}m)</span></td>
@@ -527,7 +527,7 @@
                 runLeaderboardHTML += `
                     <tr onclick="searchPlayerByName('${player.replace(/'/g, "\\\'")}')">
                         <td style="width: 80px; text-align: center;">${index + 1}</td>
-                        <td style="width: 220px;">${player}</td>
+                        <td style="width: 200px;">${player}</td>
                         <td style="text-align: center;">${formatDuration(totalTime)}</td>
                         <td style="text-align: center;">${formatNumber(data.totalRuns)}</td>
                         <td style="text-align: center;">${formatNumber(data.completedRuns || 0)}</td>
