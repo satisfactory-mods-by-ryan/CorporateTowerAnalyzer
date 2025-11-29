@@ -195,8 +195,8 @@
             // Keep all runs for daily activity analysis
             stats.allRuns = [...stats.recentRuns];
 
-            // Keep only top 50 recent runs for display
-            stats.recentRuns = stats.recentRuns.slice(0, 50);
+            // // Keep only top 50 recent runs for display
+            // stats.recentRuns = stats.recentRuns.slice(0, 50);
 
             // Add active runs to stats
             stats.activeRuns = activeRuns;
@@ -236,13 +236,26 @@
         // Load data on page load
         async function loadStats() {
             try {
+                // Show loading indicator
+                document.body.classList.add('loading');
+
                 const { runs, activeRuns } = await loadData();
-                const stats = analyzeRuns(runs, activeRuns);
-                currentStats = stats;
-                cachedActiveRuns = stats.activeRuns || [];
-                displayStats(stats, stats.activeRuns || []);
+
+                // Use requestAnimationFrame for smoother processing
+                requestAnimationFrame(() => {
+                    const stats = analyzeRuns(runs, activeRuns);
+                    currentStats = stats;
+                    cachedActiveRuns = stats.activeRuns || [];
+
+                    // Defer heavy rendering
+                    requestAnimationFrame(() => {
+                        displayStats(stats, stats.activeRuns || []);
+                        document.body.classList.remove('loading');
+                    });
+                });
             } catch (error) {
                 console.error('Error loading stats:', error);
+                document.body.classList.remove('loading');
             }
         }
 

@@ -554,3 +554,130 @@ h2 {
     background: transparent;
     cursor: default;
 }
+
+/* Loading state */
+body.loading::before {
+    content: 'Loading data...';
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #3a3a3a;
+    padding: 20px 40px;
+    border-radius: 8px;
+    border: 2px solid #FA9549;
+    font-size: 1.2em;
+    color: #FA9549;
+    z-index: 9999;
+}
+
+body.loading::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 9998;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+
+    .container {
+        padding: 15px;
+    }
+
+    h1 {
+        font-size: 1.8em;
+    }
+
+    h2 {
+        font-size: 1.4em;
+        margin: 20px 0 15px 0;
+    }
+
+    .search-bar {
+        flex-direction: column;
+    }
+
+    .search-bar button {
+        width: 100%;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .stat-card h3 {
+        font-size: 0.9em;
+    }
+
+    .stat-number {
+        font-size: 1.5em;
+    }
+
+    /* Simplify tables on mobile */
+    .leaderboard-table,
+    .runs-table {
+        font-size: 0.85em;
+    }
+
+    .leaderboard-table th,
+    .leaderboard-table td,
+    .runs-table th,
+    .runs-table td {
+        padding: 8px 4px;
+    }
+
+    /* Reduce chart bar count on mobile */
+    .chart-bars {
+        gap: 2px;
+    }
+
+    .chart-bar-container {
+        min-width: 15px;
+    }
+
+    .chart-bar-label {
+        font-size: 0.7em;
+    }
+
+    .chart-bar-value {
+        font-size: 0.7em;
+    }
+
+    /* Modal adjustments for mobile */
+    .modal-content {
+        padding: 15px;
+        max-width: 95vw;
+        max-height: 90vh;
+    }
+
+    .modal-content h2 {
+        font-size: 1.2em;
+    }
+
+    .close {
+        font-size: 1.5em;
+        right: 10px;
+        top: 10px;
+    }
+}
+
+/* Optimize scrolling performance on iOS */
+.scrollable-table-container tbody {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent zoom on input focus on iOS */
+@media (max-width: 768px) {
+    input, select, textarea {
+        font-size: 16px;
+    }
+}
