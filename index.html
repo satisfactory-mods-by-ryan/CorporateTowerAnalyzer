@@ -43,7 +43,7 @@
         </div>
 
         <div class="most-active-section">
-            <h2>Most Active Players <span style="font-size: 0.5em; font-weight: normal; color: #FFFFFF; opacity: 0.7;"><br/>Total run time only includes active run time, not checkpoints or time spent otherwise in the game.</span></h2>
+            <h2>Most Active Players <span style="font-size: 0.5em; font-weight: normal; color: #FFFFFF; opacity: 0.7;"><br/>Time in Runs only includes active run time, not checkpoints or time spent otherwise in the game.</span></h2>
             <div id="mostActive"></div>
         </div>
 
@@ -307,7 +307,7 @@
                     <p class="stat-number">${formatNumber(Object.keys(stats.playerStats).length)}</p>
                 </div>
                 <div class="stat-card">
-                    <h3>Total Time Spent in Runs</h3>
+                    <h3>Total Time in Runs</h3>
                     <p class="stat-number">${formatNumber(totalHours)}h ${totalMinutes}m</p>
                 </div>
             `;
@@ -346,43 +346,75 @@
                 const runsToCount = stats.allRuns || stats.recentRuns;
                 runsToCount.forEach(run => {
                     const date = new Date(run.timestamp);
-                    const day = date.getDate();
+                    let year = date.getFullYear();
+                    let month = date.getMonth() + 1;
+                    let day = date.getDate();
 
-                    if (!dailyRunCounts[day]) {
-                        dailyRunCounts[day] = 0;
+                    // Clip 10/31 to 11/1 to handle timezone edge cases
+                    if (year === 2025 && month === 10 && day === 31) {
+                        month = 11;
+                        day = 1;
                     }
-                    dailyRunCounts[day]++;
+
+                    const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+                    if (!dailyRunCounts[dateKey]) {
+                        dailyRunCounts[dateKey] = 0;
+                    }
+                    dailyRunCounts[dateKey]++;
                 });
 
-                const maxDailyRuns = Math.max(...Object.values(dailyRunCounts), 1);
+                // Get all dates and sort them
+                const sortedDates = Object.keys(dailyRunCounts).sort();
+
+                // Fill in missing dates - always start at 11/1/2025, end at 11/30 or max date if later
+                const allDates = [];
+                const eventStartDate = new Date(2025, 10, 1); // Nov 1, 2025
+                const eventEndDate = new Date(2025, 10, 30); // Nov 30, 2025
+
+                let maxDate = eventEndDate;
+                if (sortedDates.length > 0) {
+                    const dataMaxDate = new Date(sortedDates[sortedDates.length - 1]);
+                    if (dataMaxDate > eventEndDate) {
+                        maxDate = dataMaxDate;
+                    }
+                }
+
+                for (let d = new Date(eventStartDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
+                    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    allDates.push(dateKey);
+                }                const maxDailyRuns = Math.max(...Object.values(dailyRunCounts), 1);
 
                 let dailyChartHTML = '<div class="chart-bars">';
-                for (let day = 1; day <= 30; day++) {
-                    const count = dailyRunCounts[day] || 0;
+                allDates.forEach(dateKey => {
+                    const count = dailyRunCounts[dateKey] || 0;
+                    const [year, month, day] = dateKey.split('-').map(Number);
+                    const date = new Date(year, month - 1, day);
+                    const shortDate = `${month}/${day}`;
+
                     if (count > 0) {
                         const heightPercent = (count / maxDailyRuns) * 100;
                         const minHeightPx = 25;
-                        // Scale the percentage to use the space above the minimum
                         const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
                         dailyChartHTML += `
-                            <div class="chart-bar-container" onclick="showGlobalDailyRunDetails(${day}, ${count})" title="Day ${day}: ${count} run${count !== 1 ? 's' : ''}">
+                            <div class="chart-bar-container" onclick="showGlobalDailyRunDetails('${dateKey}', ${count})" title="${shortDate}: ${count} run${count !== 1 ? 's' : ''}">
                                 <div class="chart-bar" style="height: ${displayHeight}">
                                     <div class="chart-bar-value">${formatNumber(count)}</div>
                                 </div>
-                                <div class="chart-bar-label">D${day}</div>
+                                <div class="chart-bar-label">${shortDate}</div>
                             </div>
                         `;
                     } else {
                         dailyChartHTML += `
-                            <div class="chart-bar-container">
-                                <div class="chart-bar" style="height: 0%"></div>
-                                <div class="chart-bar-label">D${day}</div>
+                            <div class="chart-bar-container" title="${shortDate}: No runs">
+                                <div class="chart-bar" style="height: 0"></div>
+                                <div class="chart-bar-label">${shortDate}</div>
                             </div>
                         `;
                     }
-                }
+                });
                 dailyChartHTML += '</div>';
-                dailyChartHTML += '<div class="chart-description">Total runs completed each day of the month (all players)</div>';
+                dailyChartHTML += '<div class="chart-description">Total runs completed each day</div>';
                 dailyRunChartDiv.innerHTML = dailyChartHTML;
             }
 
@@ -471,7 +503,7 @@
             if (sortedByRuns.length === 0) {
                 runLeaderboardHTML = '<p style="text-align: center; color: #FFFFFF; opacity: 0.7; padding: 20px;">No players yet</p>';
             } else {
-                runLeaderboardHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 80px; text-align: center;">Rank</th><th style="width: 240px; text-align: center;">Player</th><th style="text-align: center;">Total Runs</th><th style="text-align: center;">Total Run Time</th><th style="text-align: center;">Completions</th><th style="text-align: center;">Highest Level</th><th style="text-align: center;">Fastest Time</th><th style="text-align: center;">Avg Level</th></tr></thead><tbody>';
+                runLeaderboardHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 80px; text-align: center;">Rank</th><th style="width: 240px; text-align: center;">Player</th><th style="text-align: center;">Time in Runs</th><th style="text-align: center;">Total Runs</th><th style="text-align: center;">Completions</th><th style="text-align: center;">Highest Level</th><th style="text-align: center;">Fastest Time</th><th style="text-align: center;">Avg Level</th></tr></thead><tbody>';
             sortedByRuns.forEach(([player, data], index) => {
                 const totalTime = data.runs.reduce((sum, run) => sum + parseFloat(run.duration), 0);
                 let fastestTime = '-';
@@ -494,8 +526,8 @@
                     <tr onclick="searchPlayerByName('${player.replace(/'/g, "\\\'")}')">
                         <td style="width: 80px; text-align: center;">${index + 1}</td>
                         <td style="width: 240px;">${player}</td>
-                        <td style="text-align: center;">${formatNumber(data.totalRuns)}</td>
                         <td style="text-align: center;">${formatDuration(totalTime)}</td>
+                        <td style="text-align: center;">${formatNumber(data.totalRuns)}</td>
                         <td style="text-align: center;">${formatNumber(data.completedRuns || 0)}</td>
                         <td>Level ${data.highestFloor} <span style="color: #FFFFFF; opacity: 0.6; font-size: 0.85em;">(${maxHeight.toFixed(1)}m)</span></td>
                         <td style="text-align: center;">${fastestTime}</td>
@@ -657,60 +689,89 @@
 
             data.runs.forEach(run => {
                 const date = new Date(run.timestamp);
-                const day = date.getDate();
+                let year = date.getFullYear();
+                let month = date.getMonth() + 1;
+                let day = date.getDate();
 
-                if (!dailyRunCounts[day]) {
-                    dailyRunCounts[day] = 0;
+                // Clip 10/31 to 11/1 to handle timezone edge cases
+                if (year === 2025 && month === 10 && day === 31) {
+                    month = 11;
+                    day = 1;
                 }
-                dailyRunCounts[day]++;
+
+                const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+                if (!dailyRunCounts[dateKey]) {
+                    dailyRunCounts[dateKey] = 0;
+                }
+                dailyRunCounts[dateKey]++;
             });
 
             if (Object.keys(dailyRunCounts).length === 0) {
                 return '<div style="text-align: center; color: #FFFFFF; opacity: 0.7;">No runs yet</div>';
             }
 
-            const maxRunCount = Math.max(...Object.values(dailyRunCounts), 1);
+            const sortedDates = Object.keys(dailyRunCounts).sort();
 
-            // Show all days 1-30
+            // Fill in missing dates - always start at 11/1/2025, end at 11/30 or max date if later
+            const allDates = [];
+            const eventStartDate = new Date(2025, 10, 1); // Nov 1, 2025
+            const eventEndDate = new Date(2025, 10, 30); // Nov 30, 2025
+
+            let maxDate = eventEndDate;
+            if (sortedDates.length > 0) {
+                const dataMaxDate = new Date(sortedDates[sortedDates.length - 1]);
+                if (dataMaxDate > eventEndDate) {
+                    maxDate = dataMaxDate;
+                }
+            }
+
+            for (let d = new Date(eventStartDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
+                const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                allDates.push(dateKey);
+            }            const maxRunCount = Math.max(...Object.values(dailyRunCounts), 1);
+
             let chartHTML = '<div class="chart-bars">';
-            for (let day = 1; day <= 30; day++) {
-                const count = dailyRunCounts[day] || 0;
+            allDates.forEach(dateKey => {
+                const count = dailyRunCounts[dateKey] || 0;
+                const [year, month, day] = dateKey.split('-').map(Number);
+                const shortDate = `${month}/${day}`;
                 if (count > 0) {
                     const heightPercent = (count / maxRunCount) * 100;
                     const minHeightPx = 25;
                     // Scale the percentage to use the space above the minimum
                     const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
                     chartHTML += `
-                        <div class="chart-bar-container" onclick="showDailyRunCountDetails('${data.playerName.replace(/'/g, "\\'")}', ${day}, ${count})" title="Day ${day}: ${count} run${count !== 1 ? 's' : ''}">
+                        <div class="chart-bar-container" onclick="showDailyRunCountDetails('${data.playerName.replace(/'/g, "\\'")}', '${dateKey}', ${count})" title="${shortDate}: ${count} run${count !== 1 ? 's' : ''}">
                             <div class="chart-bar" style="height: ${displayHeight}">
                                 <div class="chart-bar-value">${count}</div>
                             </div>
-                            <div class="chart-bar-label">D${day}</div>
+                            <div class="chart-bar-label">${shortDate}</div>
                         </div>
                     `;
                 } else {
-                    // Empty day
                     chartHTML += `
-                        <div class="chart-bar-container">
-                            <div class="chart-bar" style="height: 0%"></div>
-                            <div class="chart-bar-label">D${day}</div>
+                        <div class="chart-bar-container" title="${shortDate}: No runs">
+                            <div class="chart-bar" style="height: 0"></div>
+                            <div class="chart-bar-label">${shortDate}</div>
                         </div>
                     `;
                 }
-            }
+            });
             chartHTML += '</div>';
-            chartHTML += '<div class="chart-description">Number of runs completed each day of the month</div>';
+            chartHTML += '<div class="chart-description">Number of runs completed each day</div>';
 
             return chartHTML;
         }
 
-        window.showDailyRunCountDetails = function(playerName, day, count) {
+        window.showDailyRunCountDetails = function(playerName, dateKey, count) {
             if (!currentStats || !currentStats.playerStats[playerName]) return;
 
+            const [year, month, day] = dateKey.split('-').map(Number);
             const playerData = currentStats.playerStats[playerName];
             const dayRuns = playerData.runs.filter(run => {
                 const date = new Date(run.timestamp);
-                return date.getDate() === day;
+                return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
             });
 
             if (dayRuns.length === 0) return;
@@ -734,10 +795,12 @@
             });
             runsHTML += '</tbody></table></div>';
 
+            const displayDate = new Date(year, month - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
             modal.innerHTML = `
                 <div class="modal-content">
                     <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
-                    <h2>${playerName} - Day ${day} (${count} run${count !== 1 ? 's' : ''})</h2>
+                    <h2>${playerName} - ${displayDate} (${count} run${count !== 1 ? 's' : ''})</h2>
                     ${runsHTML}
                 </div>
             `;
@@ -754,10 +817,20 @@
 
             data.runs.forEach(run => {
                 const date = new Date(run.timestamp);
-                const day = date.getDate();
+                let year = date.getFullYear();
+                let month = date.getMonth() + 1;
+                let day = date.getDate();
 
-                if (!dailyStats[day] || run.floor > dailyStats[day].floor) {
-                    dailyStats[day] = {
+                // Clip 10/31 to 11/1 to handle timezone edge cases
+                if (year === 2025 && month === 10 && day === 31) {
+                    month = 11;
+                    day = 1;
+                }
+
+                const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+                if (!dailyStats[dateKey] || run.floor > dailyStats[dateKey].floor) {
+                    dailyStats[dateKey] = {
                         floor: run.floor,
                         height: run.formattedHeight,
                         date: run.formattedDate,
@@ -770,49 +843,71 @@
                 return '<div style="text-align: center; color: #FFFFFF; opacity: 0.7;">No runs yet</div>';
             }
 
+            const sortedDates = Object.keys(dailyStats).sort();
+
+            // Fill in missing dates - always start at 11/1/2025, end at 11/30 or max date if later
+            const allDates = [];
+            const eventStartDate = new Date(2025, 10, 1); // Nov 1, 2025
+            const eventEndDate = new Date(2025, 10, 30); // Nov 30, 2025
+
+            let maxDate = eventEndDate;
+            if (sortedDates.length > 0) {
+                const dataMaxDate = new Date(sortedDates[sortedDates.length - 1]);
+                if (dataMaxDate > eventEndDate) {
+                    maxDate = dataMaxDate;
+                }
+            }
+
+            for (let d = new Date(eventStartDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
+                const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                allDates.push(dateKey);
+            }
+
             const maxFloor = Math.max(...Object.values(dailyStats).map(d => d.floor), 21);
 
-            // Show all days 1-30
             let chartHTML = '<div class="chart-bars">';
-            for (let day = 1; day <= 30; day++) {
-                const dayData = dailyStats[day];
+            allDates.forEach(dateKey => {
+                const dayData = dailyStats[dateKey];
+                const [year, month, day] = dateKey.split('-').map(Number);
+                const shortDate = `${month}/${day}`;
                 if (dayData) {
                     const heightPercent = (dayData.floor / maxFloor) * 100;
                     const minHeightPx = 25;
                     // Scale the percentage to use the space above the minimum
                     const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
                     chartHTML += `
-                        <div class="chart-bar-container" onclick="showDailyProgressDetails(${day}, '${dayData.height}', '${dayData.date}', ${dayData.floor}, ${dayData.runId})" title="Day ${day}: Level ${dayData.floor} (${dayData.height}m)">
+                        <div class="chart-bar-container" onclick="showDailyProgressDetails('${dateKey}', '${dayData.height}', '${dayData.date}', ${dayData.floor}, ${dayData.runId})" title="${shortDate}: Level ${dayData.floor} (${dayData.height}m)">
                             <div class="chart-bar" style="height: ${displayHeight}">
                                 <div class="chart-bar-value">${dayData.floor}</div>
                             </div>
-                            <div class="chart-bar-label">D${day}</div>
+                            <div class="chart-bar-label">${shortDate}</div>
                         </div>
                     `;
                 } else {
-                    // Empty day
                     chartHTML += `
-                        <div class="chart-bar-container">
-                            <div class="chart-bar" style="height: 0%"></div>
-                            <div class="chart-bar-label">D${day}</div>
+                        <div class="chart-bar-container" title="${shortDate}: No runs">
+                            <div class="chart-bar" style="height: 0"></div>
+                            <div class="chart-bar-label">${shortDate}</div>
                         </div>
                     `;
                 }
-            }
+            });
             chartHTML += '</div>';
-            chartHTML += '<div class="chart-description">Highest level reached each day of the month</div>';
+            chartHTML += '<div class="chart-description">Highest level reached each day</div>';
 
             return chartHTML;
         }
 
-        window.showGlobalDailyRunDetails = function(day, count) {
+        window.showGlobalDailyRunDetails = function(dateKey, count) {
             if (!currentStats) return;
+
+            const [year, month, day] = dateKey.split('-').map(Number);
 
             // Get all runs for this day (use allRuns for complete dataset)
             const allRunsData = currentStats.allRuns || currentStats.recentRuns;
             const dayRuns = allRunsData.filter(run => {
                 const date = new Date(run.timestamp);
-                return date.getDate() === day;
+                return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
             }).sort((a, b) => {
                 const timeA = new Date(a.timestamp).getTime();
                 const timeB = new Date(b.timestamp).getTime();
@@ -841,10 +936,12 @@
             });
             runsHTML += '</tbody></table></div>';
 
+            const displayDate = new Date(year, month - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
             modal.innerHTML = `
                 <div class="modal-content" style="max-width: 1100px;">
                     <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
-                    <h2>Day ${day} - ${count} Run${count !== 1 ? 's' : ''}</h2>
+                    <h2>${displayDate} - ${count} Run${count !== 1 ? 's' : ''}</h2>
                     ${runsHTML}
                 </div>
             `;
@@ -855,8 +952,11 @@
             });
         };
 
-        window.showDailyProgressDetails = function(day, height, date, floor, runId) {
+        window.showDailyProgressDetails = function(dateKey, height, date, floor, runId) {
             if (!currentStats || !currentStats.playerStats) return;
+
+            const [year, month, day] = dateKey.split('-').map(Number);
+            const displayDate = new Date(year, month - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
             // Find the run to get duration
             let runDuration = null;
@@ -873,7 +973,7 @@
             modal.innerHTML = `
                 <div class="modal-content">
                     <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
-                    <h2>Day ${day} - Highest Level ${floor}</h2>
+                    <h2>${displayDate} - Highest Level ${floor}</h2>
                     <div style="padding: 20px; text-align: center;">
                         <p style="font-size: 1.2em; margin: 10px 0;"><strong>Level:</strong> ${floor}</p>
                         <p style="font-size: 1.2em; margin: 10px 0;"><strong>Height:</strong> ${height}m</p>
@@ -1002,10 +1102,12 @@
                             <span class="label">Total Runs:</span>
                             <span class="value">${formatNumber(data.totalRuns)}</span>
                         </div>
+                        ${data.completedRuns > 0 ? `
                         <div class="player-stat stat-narrow">
-                            <span class="label">Completed:</span>
+                            <span class="label">Completions:</span>
                             <span class="value">${formatNumber(data.completedRuns || 0)}</span>
                         </div>
+                        ` : ''}
                         <div class="player-stat">
                             <span class="label">Highest Level:</span>
                             <span class="value">Level ${data.highestFloor} <span style="color: #FFFFFF; opacity: 0.6; font-size: 0.85em;">(${Math.max(...data.runs.map(r => parseFloat(r.formattedHeight))).toFixed(1)}m)</span></span>
@@ -1026,6 +1128,10 @@
                         <div class="player-stat">
                             <span class="label">Average Level:</span>
                             <span class="value">${data.averageFloor}</span>
+                        </div>
+                        <div class="player-stat">
+                            <span class="label">Time in Runs:</span>
+                            <span class="value">${formatDuration(data.runs.reduce((sum, run) => sum + parseFloat(run.duration), 0))}</span>
                         </div>
                     </div>
                     <h4>Runs by Highest Level Reached</h4>
