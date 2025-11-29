@@ -612,7 +612,7 @@ body.loading::before {
 }
 
 body.loading::after {
-    content: 'Loading data...';
+    content: 'Loading data..';
     position: fixed;
     top: 50%;
     left: 50%;
