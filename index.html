@@ -382,7 +382,7 @@
                     }
                 }
                 dailyChartHTML += '</div>';
-                dailyChartHTML += '<div style="text-align: center; margin-top: 10px; color: #FFFFFF; opacity: 0.7; font-size: 0.85em;">Total runs completed each day of the month (all players)</div>';
+                dailyChartHTML += '<div class="chart-description">Total runs completed each day of the month (all players)</div>';
                 dailyRunChartDiv.innerHTML = dailyChartHTML;
             }
 
@@ -699,7 +699,7 @@
                 }
             }
             chartHTML += '</div>';
-            chartHTML += '<div style="text-align: center; margin-top: 10px; color: #FFFFFF; opacity: 0.7; font-size: 0.85em;">Number of runs completed each day of the month</div>';
+            chartHTML += '<div class="chart-description">Number of runs completed each day of the month</div>';
 
             return chartHTML;
         }
@@ -800,7 +800,7 @@
                 }
             }
             chartHTML += '</div>';
-            chartHTML += '<div style="text-align: center; margin-top: 10px; color: #FFFFFF; opacity: 0.7; font-size: 0.85em;">Highest level reached each day of the month</div>';
+            chartHTML += '<div class="chart-description">Highest level reached each day of the month</div>';
 
             return chartHTML;
         }
@@ -990,7 +990,7 @@
                 }
             }
             playerChartHTML += '</div>';
-            playerChartHTML += '<div style="text-align: center; margin-top: 10px; color: #FFFFFF; opacity: 0.7; font-size: 0.85em;">Number of runs completed on each level</div>';
+            playerChartHTML += '<div class="chart-description">Number of runs completed on each level</div>';
             let html = `
                 <div class="player-card">
                     <div class="player-card-header">
