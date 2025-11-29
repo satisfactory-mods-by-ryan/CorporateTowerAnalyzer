@@ -322,8 +322,9 @@
                 const count = stats.floorStats[floor] || 0;
                 const heightPercent = maxRuns > 0 ? (count / maxRuns) * 100 : 0;
                 const minHeightPx = 25; // Minimum height in pixels for visibility
-                // Scale the percentage to use the space above the minimum
-                const displayHeight = count > 0 ? `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)` : '0';
+                const labelHeightPx = 30; // Approximate height of label + margin
+                // Scale the percentage to use the space above the minimum, accounting for label
+                const displayHeight = count > 0 ? `calc(((100% - ${labelHeightPx}px - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)` : '0';
 
                 chartHTML += `
                     <div class="chart-bar-container" onclick="showFloorDetails(${floor})">
@@ -395,7 +396,8 @@
                     if (count > 0) {
                         const heightPercent = (count / maxDailyRuns) * 100;
                         const minHeightPx = 25;
-                        const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
+                        const labelHeightPx = 30;
+                        const displayHeight = `calc(((100% - ${labelHeightPx}px - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
                         dailyChartHTML += `
                             <div class="chart-bar-container" onclick="showGlobalDailyRunDetails('${dateKey}', ${count})" title="${shortDate}: ${count} run${count !== 1 ? 's' : ''}">
                                 <div class="chart-bar" style="height: ${displayHeight}">
@@ -453,7 +455,7 @@
             if (sortedPlayers.length === 0) {
                 leaderboardHTML = '<p style="text-align: center; color: #FFFFFF; opacity: 0.7; padding: 20px;">No players yet</p>';
             } else {
-                leaderboardHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 80px; text-align: center;">Rank</th><th style="width: 240px; text-align: center;">Player</th><th style="text-align: center;">Total Runs</th><th style="text-align: center;">Completions</th><th style="text-align: center;">Highest Level</th><th style="text-align: center;">Fastest Time</th><th style="text-align: center;">Avg Level</th></tr></thead><tbody>';
+                leaderboardHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 80px; text-align: center;">Rank</th><th style="width: 200px; text-align: center;">Player</th><th style="text-align: center;">Total Runs</th><th style="text-align: center;">Completions</th><th style="text-align: center;">Highest Level</th><th style="text-align: center;">Fastest Time</th><th style="text-align: center;">Avg Level</th></tr></thead><tbody>';
             sortedPlayers.forEach(([player, data], index) => {
                 let fastestTime = '-';
                 if (data.completedRuns > 0) {
@@ -472,7 +474,7 @@
                 leaderboardHTML += `
                     <tr onclick="searchPlayerByName('${player.replace(/'/g, "\\'")}')" ${rowStyle}>
                         <td style="width: 80px; text-align: center;">${index + 1}</td>
-                        <td style="width: 240px;">${player}</td>
+                        <td style="width: 220px;">${player}</td>
                         <td style="text-align: center;">${formatNumber(data.totalRuns)}</td>
                         <td style="text-align: center;">${formatNumber(data.completedRuns || 0)}</td>
                         <td>Level ${data.highestFloor} <span style="color: #FFFFFF; opacity: 0.6; font-size: 0.85em;">(${maxHeight.toFixed(1)}m)</span></td>
@@ -503,7 +505,7 @@
             if (sortedByRuns.length === 0) {
                 runLeaderboardHTML = '<p style="text-align: center; color: #FFFFFF; opacity: 0.7; padding: 20px;">No players yet</p>';
             } else {
-                runLeaderboardHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 80px; text-align: center;">Rank</th><th style="width: 240px; text-align: center;">Player</th><th style="text-align: center;">Time in Runs</th><th style="text-align: center;">Total Runs</th><th style="text-align: center;">Completions</th><th style="text-align: center;">Highest Level</th><th style="text-align: center;">Fastest Time</th><th style="text-align: center;">Avg Level</th></tr></thead><tbody>';
+                runLeaderboardHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 80px; text-align: center;">Rank</th><th style="width: 200px; text-align: center;">Player</th><th style="text-align: center;">Time in Runs</th><th style="text-align: center;">Total Runs</th><th style="text-align: center;">Completions</th><th style="text-align: center;">Highest Level</th><th style="text-align: center;">Fastest Time</th><th style="text-align: center;">Avg Level</th></tr></thead><tbody>';
             sortedByRuns.forEach(([player, data], index) => {
                 const totalTime = data.runs.reduce((sum, run) => sum + parseFloat(run.duration), 0);
                 let fastestTime = '-';
@@ -525,7 +527,7 @@
                 runLeaderboardHTML += `
                     <tr onclick="searchPlayerByName('${player.replace(/'/g, "\\\'")}')">
                         <td style="width: 80px; text-align: center;">${index + 1}</td>
-                        <td style="width: 240px;">${player}</td>
+                        <td style="width: 220px;">${player}</td>
                         <td style="text-align: center;">${formatDuration(totalTime)}</td>
                         <td style="text-align: center;">${formatNumber(data.totalRuns)}</td>
                         <td style="text-align: center;">${formatNumber(data.completedRuns || 0)}</td>
@@ -583,7 +585,7 @@
                     })
                     .slice(0, maxRuns);
 
-                let recentRunsHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 100px; text-align: center;">Run #</th><th style="width: 240px; text-align: center;">Player</th><th style="width: 80px; text-align: center;">Level</th><th style="width: 90px; text-align: center;">Height</th><th style="width: 120px; text-align: center;">Duration</th><th style="width: 120px; text-align: center;">Completed</th><th style="width: 180px; text-align: center;">Date Started</th></tr></thead><tbody>';
+                let recentRunsHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 100px; text-align: center;">Run #</th><th style="width: 200px; text-align: center;">Player</th><th style="width: 80px; text-align: center;">Level</th><th style="width: 90px; text-align: center;">Height</th><th style="width: 120px; text-align: center;">Duration</th><th style="width: 120px; text-align: center;">Completed</th><th style="width: 180px; text-align: center;">Date Started</th></tr></thead><tbody>';
 
                 recentRuns.forEach(run => {
                     const runNumber = run.isActive ? '-' : `#${run.id}`;
@@ -594,7 +596,7 @@
                     recentRunsHTML += `
                         <tr onclick="searchPlayerByName('${run.playerName.replace(/'/g, "\\\'")}')">
                             <td style="width: 100px; text-align: center;">${runNumber}</td>
-                            <td style="width: 240px;">${run.playerName}</td>
+                            <td style="width: 220px;">${run.playerName}</td>
                             <td style="width: 80px; text-align: center;">${run.floor}</td>
                             <td style="width: 90px; text-align: center;">${run.formattedHeight}m</td>
                             <td style="width: 120px; text-align: center;">${formatDuration(parseFloat(run.duration))}</td>
@@ -739,8 +741,9 @@
                 if (count > 0) {
                     const heightPercent = (count / maxRunCount) * 100;
                     const minHeightPx = 25;
-                    // Scale the percentage to use the space above the minimum
-                    const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
+                    const labelHeightPx = 30;
+                    // Scale the percentage to use the space above the minimum, accounting for label
+                    const displayHeight = `calc(((100% - ${labelHeightPx}px - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
                     chartHTML += `
                         <div class="chart-bar-container" onclick="showDailyRunCountDetails('${data.playerName.replace(/'/g, "\\'")}', '${dateKey}', ${count})" title="${shortDate}: ${count} run${count !== 1 ? 's' : ''}">
                             <div class="chart-bar" style="height: ${displayHeight}">
@@ -873,8 +876,9 @@
                 if (dayData) {
                     const heightPercent = (dayData.floor / maxFloor) * 100;
                     const minHeightPx = 25;
-                    // Scale the percentage to use the space above the minimum
-                    const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
+                    const labelHeightPx = 30;
+                    // Scale the percentage to use the space above the minimum, accounting for label
+                    const displayHeight = `calc(((100% - ${labelHeightPx}px - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
                     chartHTML += `
                         <div class="chart-bar-container" onclick="showDailyProgressDetails('${dateKey}', '${dayData.height}', '${dayData.date}', ${dayData.floor}, ${dayData.runId})" title="${shortDate}: Level ${dayData.floor} (${dayData.height}m)">
                             <div class="chart-bar" style="height: ${displayHeight}">
@@ -919,13 +923,13 @@
             const modal = document.createElement('div');
             modal.className = 'modal';
 
-            let runsHTML = '<div class="scrollable-table-container"><table class="runs-table"><thead><tr><th style="width: 100px; text-align: center;">Run #</th><th style="width: 240px; text-align: center;">Player</th><th style="width: 80px; text-align: center;">Level</th><th style="width: 90px; text-align: center;">Height</th><th style="width: 120px; text-align: center;">Duration</th><th style="width: 120px; text-align: center;">Completed</th><th style="width: 180px; text-align: center;">Date Started</th></tr></thead><tbody>';
+            let runsHTML = '<div class="scrollable-table-container"><table class="runs-table"><thead><tr><th style="width: 100px; text-align: center;">Run #</th><th style="width: 200px; text-align: center;">Player</th><th style="width: 80px; text-align: center;">Level</th><th style="width: 90px; text-align: center;">Height</th><th style="width: 120px; text-align: center;">Duration</th><th style="width: 120px; text-align: center;">Completed</th><th style="width: 180px; text-align: center;">Date Started</th></tr></thead><tbody>';
             dayRuns.forEach(run => {
                 const statusBadge = run.completed ? '<span class="completed-badge">✓</span>' : '<span class="incomplete-badge">-</span>';
                 runsHTML += `
                     <tr style="cursor: default;">
                         <td style="width: 100px; text-align: center;">#${run.id}</td>
-                        <td style="width: 240px;">${run.playerName}</td>
+                        <td style="width: 200px;">${run.playerName}</td>
                         <td style="width: 80px; text-align: center;">${run.floor}</td>
                         <td style="width: 90px; text-align: center;">${run.formattedHeight}m</td>
                         <td style="width: 120px; text-align: center;">${formatDuration(parseFloat(run.duration))}</td>
@@ -1070,8 +1074,9 @@
 
                 if (count > 0) {
                     const minHeightPx = 25;
-                    // Scale the percentage to use the space above the minimum
-                    const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
+                    const labelHeightPx = 30;
+                    // Scale the percentage to use the space above the minimum, accounting for label
+                    const displayHeight = `calc(((100% - ${labelHeightPx}px - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
                     playerChartHTML += `
                         <div class="chart-bar-container" onclick="showPlayerFloorDetails('${data.playerName.replace(/'/g, "\\'" ).replace(/"/g, '&quot;')}', ${floor})" title="Level ${floor}: ${count} run${count !== 1 ? 's' : ''}">
                             <div class="chart-bar" style="height: ${displayHeight}">
@@ -1292,7 +1297,7 @@
                             <thead>
                                 <tr>
                                     <th style="width: 100px; text-align: center;">Run #</th>
-                                    <th style="width: 240px; text-align: center;">Player</th>
+                                    <th style="width: 200px; text-align: center;">Player</th>
                                     <th style="width: 90px; text-align: center;">Height</th>
                                     <th style="width: 120px; text-align: center;">Duration</th>
                                     <th style="width: 120px; text-align: center;">Completed</th>
@@ -1305,7 +1310,7 @@
                                     return `
                                     <tr style="cursor: default;">
                                         <td style="width: 100px; text-align: center;">#${run.id}</td>
-                                        <td style="width: 240px;">${run.playerName}</td>
+                                        <td style="width: 200px;">${run.playerName}</td>
                                         <td style="width: 90px; text-align: center;">${run.formattedHeight}m</td>
                                         <td style="width: 120px; text-align: center;">${formatDuration(parseFloat(run.duration))}</td>
                                         <td style="width: 120px; text-align: center;">${statusBadge}</td>
