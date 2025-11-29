@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corporate Tower Analyzer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Corporate Tower Analyzer</h1>
+        </header>
+
+        <div class="search-section">
+            <h2>Search Player</h2>
+            <div class="search-bar" style="position: relative;">
+                <input type="text" id="playerSearch" placeholder="Enter player name..." autocomplete="off" />
+                <button onclick="searchPlayer()">Search</button>
+                <div id="suggestions" class="suggestions-dropdown"></div>
+            </div>
+            <div id="playerResult"></div>
+        </div>
+
+        <div class="stats-section">
+            <h2>Overall Statistics</h2>
+            <div id="overallStats" class="stats-grid"></div>
+        </div>
+
+        <div class="chart-section">
+            <h2>Runs by Highest Level Reached</h2>
+            <div id="floorChart" class="chart-container"></div>
+        </div>
+
+        <div class="chart-section">
+            <h2>Daily Run Count</h2>
+            <div id="dailyRunChart" class="chart-container"></div>
+        </div>
+
+        <div class="leaderboard-section">
+            <h2>Top Players</h2>
+            <div id="leaderboard"></div>
+        </div>
+
+        <div class="most-active-section">
+            <h2>Most Active Players <span style="font-size: 0.5em; font-weight: normal; color: #FFFFFF; opacity: 0.7;"><br/>Total run time only includes active run time, not checkpoints or time spent otherwise in the game.</span></h2>
+            <div id="mostActive"></div>
+        </div>
+
+        <div class="recent-runs-section">
+            <h2>Recent Runs</h2>
+            <div id="recentRuns"></div>
+        </div>
+
+    </div>
+
+    <script type="module">
+        import { formatDate, calculateFloor, formatHeight, FLOOR_HEIGHTS } from './utils.js';
+
+        let currentStats = null;
+        let cachedActiveRuns = [];
+        let floorDataCache = {};
+
+        // Run IDs to exclude from analysis
+        const EXCLUDED_RUN_IDS = [1703, 1698, 5828];
+
+        // Format number with commas
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        // Format duration as "3h 2m 50s" or "5m 20s"
+        function formatDuration(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+
+            let result = '';
+            if (h > 0) result += h + 'h ';
+            if (m > 0) result += m + 'm ';
+            if (s > 0 || result === '') result += s + 's';
+            return result.trim();
+        }
+
+        // Analyze runs data
+        function analyzeRuns(runs, activeRuns = []) {
+            if (!Array.isArray(runs)) {
+                console.error('Expected runs to be an array, got:', typeof runs);
+                return {
+                    totalRuns: 0,
+                    completedRuns: 0,
+                    playerStats: {},
+                    floorStats: {},
+                    recentRuns: [],
+                    activeRuns: []
+                };
+            }
+
+            const stats = {
+                totalRuns: runs.length,
+                completedRuns: 0,
+                playerStats: {},
+                floorStats: {},
+                recentRuns: []
+            };
+
+            // Initialize floor stats (0-21)
+            for (let i = 0; i <= FLOOR_HEIGHTS.length; i++) {
+                stats.floorStats[i] = 0;
+            }
+
+            runs.forEach(run => {
+                const playerName = run.playerName || 'Unknown';
+                const rawHeight = run.maxHeight || 0;
+                const formattedHeight = parseFloat(formatHeight(rawHeight));
+                const floor = calculateFloor(formattedHeight);
+                const timestamp = run.startedAt || run.createdAt;
+                const duration = run.verifiedDuration || run.duration || 0;
+                const completed = floor >= 21;
+
+                if (completed) {
+                    stats.completedRuns++;
+                }
+
+                // Player statistics
+                if (!stats.playerStats[playerName]) {
+                    stats.playerStats[playerName] = {
+                        totalRuns: 0,
+                        completedRuns: 0,
+                        runs: [],
+                        highestFloor: 0,
+                        highestHeight: 0,
+                        averageFloor: 0,
+                        totalPlaytime: 0
+                    };
+                }
+
+                stats.playerStats[playerName].totalRuns++;
+                stats.playerStats[playerName].totalPlaytime += duration;
+                if (completed) {
+                    stats.playerStats[playerName].completedRuns++;
+                }
+
+                stats.playerStats[playerName].runs.push({
+                    id: run.id,
+                    rawHeight,
+                    formattedHeight: formattedHeight.toFixed(1),
+                    floor,
+                    timestamp,
+                    formattedDate: formatDate(timestamp),
+                    duration: parseFloat(duration).toFixed(2),
+                    verifiedDuration: run.verifiedDuration,
+                    originalDuration: run.duration,
+                    completed
+                });
+
+                if (floor > stats.playerStats[playerName].highestFloor) {
+                    stats.playerStats[playerName].highestFloor = floor;
+                    stats.playerStats[playerName].highestHeight = formattedHeight.toFixed(1);
+                }
+
+                // Floor statistics
+                stats.floorStats[floor] = (stats.floorStats[floor] || 0) + 1;
+
+                // Recent runs
+                stats.recentRuns.push({
+                    id: run.id,
+                    playerName,
+                    rawHeight,
+                    formattedHeight: formattedHeight.toFixed(1),
+                    floor,
+                    timestamp,
+                    formattedDate: formatDate(timestamp),
+                    duration: parseFloat(duration).toFixed(2),
+                    verifiedDuration: run.verifiedDuration,
+                    originalDuration: run.duration,
+                    completed
+                });
+            });
+
+            // Calculate average floors for each player
+            Object.keys(stats.playerStats).forEach(player => {
+                const playerData = stats.playerStats[player];
+                const totalFloors = playerData.runs.reduce((sum, run) => sum + run.floor, 0);
+                playerData.averageFloor = (totalFloors / playerData.totalRuns).toFixed(2);
+            });
+
+            // Sort recent runs by timestamp (newest first)
+            stats.recentRuns.sort((a, b) => {
+                const timeA = new Date(a.timestamp).getTime() || 0;
+                const timeB = new Date(b.timestamp).getTime() || 0;
+                return timeB - timeA;
+            });
+
+            // Keep all runs for daily activity analysis
+            stats.allRuns = [...stats.recentRuns];
+
+            // Keep only top 50 recent runs for display
+            stats.recentRuns = stats.recentRuns.slice(0, 50);
+
+            // Add active runs to stats
+            stats.activeRuns = activeRuns;
+
+            return stats;
+        }
+
+        // Load data from API
+        async function loadData() {
+            try {
+                const [runsResponse, activeRunsResponse] = await Promise.all([
+                    fetch('https://coffeecupstudios.org/api/runs'),
+                    fetch('https://coffeecupstudios.org/api/runs/active').catch(() => ({ ok: false }))
+                ]);
+
+                if (!runsResponse.ok) {
+                    throw new Error(`API responded with status: ${runsResponse.status}`);
+                }
+                const parsed = await runsResponse.json();
+                let runs = Array.isArray(parsed) ? parsed : (parsed.runs || []);
+                // Filter out excluded runs
+                runs = runs.filter(run => !EXCLUDED_RUN_IDS.includes(run.id));
+
+                // Fetch active runs
+                let activeRuns = [];
+                if (activeRunsResponse.ok) {
+                    activeRuns = await activeRunsResponse.json();
+                }
+
+                return { runs, activeRuns };
+            } catch (error) {
+                console.error('Error loading data from API:', error);
+                return { runs: [], activeRuns: [] };
+            }
+        }
+
+        // Load data on page load
+        async function loadStats() {
+            try {
+                const { runs, activeRuns } = await loadData();
+                const stats = analyzeRuns(runs, activeRuns);
+                currentStats = stats;
+                cachedActiveRuns = stats.activeRuns || [];
+                displayStats(stats, stats.activeRuns || []);
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        function displayStats(stats, activeRuns = []) {
+            // Overall statistics
+            const overallDiv = document.getElementById('overallStats');
+
+            // Calculate total time spent across all runs
+            const allRunsData = stats.allRuns || stats.recentRuns || [];
+            const totalSeconds = allRunsData.reduce((sum, run) => sum + parseFloat(run.duration), 0);
+            const totalHours = Math.floor(totalSeconds / 3600);
+            const totalMinutes = Math.floor((totalSeconds % 3600) / 60);
+
+            overallDiv.innerHTML = `
+                <div class="stat-card">
+                    <h3>Total Runs</h3>
+                    <p class="stat-number">${formatNumber(stats.totalRuns)}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Completed Runs</h3>
+                    <p class="stat-number">${formatNumber(stats.completedRuns)}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Players</h3>
+                    <p class="stat-number">${formatNumber(Object.keys(stats.playerStats).length)}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Time Spent in Runs</h3>
+                    <p class="stat-number">${formatNumber(totalHours)}h ${totalMinutes}m</p>
+                </div>
+            `;
+
+            // Level chart - show all levels 0-21 with linear scale
+            const chartDiv = document.getElementById('floorChart');
+            let chartHTML = '<div class="chart-bars">';
+            const maxRuns = Math.max(...Object.values(stats.floorStats), 1);
+
+            // Show all levels from 0 to 21
+            for (let floor = 0; floor <= 21; floor++) {
+                const count = stats.floorStats[floor] || 0;
+                const heightPercent = maxRuns > 0 ? (count / maxRuns) * 100 : 0;
+                const minHeightPx = 25; // Minimum height in pixels for visibility
+                // Scale the percentage to use the space above the minimum
+                const displayHeight = count > 0 ? `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)` : '0';
+
+                chartHTML += `
+                    <div class="chart-bar-container" onclick="showFloorDetails(${floor})">
+                        <div class="chart-bar" style="height: ${displayHeight}">
+                            ${count > 0 ? `<div class="chart-bar-value">${formatNumber(count)}</div>` : ''}
+                        </div>
+                        <div class="chart-bar-label">F${floor}</div>
+                    </div>
+                `;
+            }
+            chartHTML += '</div>';
+            chartDiv.innerHTML = chartHTML;
+
+            // Global daily run count chart
+            const dailyRunChartDiv = document.getElementById('dailyRunChart');
+            if (dailyRunChartDiv) {
+                const dailyRunCounts = {};
+
+                // Count all runs per day (use allRuns for complete dataset)
+                const runsToCount = stats.allRuns || stats.recentRuns;
+                runsToCount.forEach(run => {
+                    const date = new Date(run.timestamp);
+                    const day = date.getDate();
+
+                    if (!dailyRunCounts[day]) {
+                        dailyRunCounts[day] = 0;
+                    }
+                    dailyRunCounts[day]++;
+                });
+
+                const maxDailyRuns = Math.max(...Object.values(dailyRunCounts), 1);
+
+                let dailyChartHTML = '<div class="chart-bars">';
+                for (let day = 1; day <= 30; day++) {
+                    const count = dailyRunCounts[day] || 0;
+                    if (count > 0) {
+                        const heightPercent = (count / maxDailyRuns) * 100;
+                        const minHeightPx = 25;
+                        // Scale the percentage to use the space above the minimum
+                        const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
+                        dailyChartHTML += `
+                            <div class="chart-bar-container" onclick="showGlobalDailyRunDetails(${day}, ${count})" title="Day ${day}: ${count} run${count !== 1 ? 's' : ''}">
+                                <div class="chart-bar" style="height: ${displayHeight}">
+                                    <div class="chart-bar-value">${formatNumber(count)}</div>
+                                </div>
+                                <div class="chart-bar-label">D${day}</div>
+                            </div>
+                        `;
+                    } else {
+                        dailyChartHTML += `
+                            <div class="chart-bar-container">
+                                <div class="chart-bar" style="height: 0%"></div>
+                                <div class="chart-bar-label">D${day}</div>
+                            </div>
+                        `;
+                    }
+                }
+                dailyChartHTML += '</div>';
+                dailyChartHTML += '<div style="text-align: center; margin-top: 10px; color: #FFFFFF; opacity: 0.7; font-size: 0.85em;">Total runs completed each day of the month (all players)</div>';
+                dailyRunChartDiv.innerHTML = dailyChartHTML;
+            }
+
+            // Top players
+            const leaderboardDiv = document.getElementById('leaderboard');
+            if (!leaderboardDiv) {
+                console.error('leaderboard div not found');
+                return;
+            }
+
+            const sortedPlayers = Object.entries(stats.playerStats)
+                .sort((a, b) => {
+                    const aCompleted = a[1].completedRuns > 0;
+                    const bCompleted = b[1].completedRuns > 0;
+
+                    // If both have completions, sort by fastest time
+                    if (aCompleted && bCompleted) {
+                        const aCompletedRuns = a[1].runs.filter(r => r.completed);
+                        const bCompletedRuns = b[1].runs.filter(r => r.completed);
+                        const aFastest = Math.min(...aCompletedRuns.map(r => parseFloat(r.duration)));
+                        const bFastest = Math.min(...bCompletedRuns.map(r => parseFloat(r.duration)));
+                        return aFastest - bFastest;
+                    }
+
+                    // If only one has completions, they rank higher
+                    if (aCompleted && !bCompleted) return -1;
+                    if (!aCompleted && bCompleted) return 1;
+
+                    // Otherwise sort by max height
+                    const aMaxHeight = Math.max(...a[1].runs.map(r => parseFloat(r.formattedHeight)));
+                    const bMaxHeight = Math.max(...b[1].runs.map(r => parseFloat(r.formattedHeight)));
+                    return bMaxHeight - aMaxHeight;
+                });
+
+            let leaderboardHTML = '';
+            if (sortedPlayers.length === 0) {
+                leaderboardHTML = '<p style="text-align: center; color: #FFFFFF; opacity: 0.7; padding: 20px;">No players yet</p>';
+            } else {
+                leaderboardHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 80px; text-align: center;">Rank</th><th style="width: 240px; text-align: center;">Player</th><th style="text-align: center;">Total Runs</th><th style="text-align: center;">Completions</th><th style="text-align: center;">Highest Level</th><th style="text-align: center;">Fastest Time</th><th style="text-align: center;">Avg Level</th></tr></thead><tbody>';
+            sortedPlayers.forEach(([player, data], index) => {
+                let fastestTime = '-';
+                if (data.completedRuns > 0) {
+                    const completedRuns = data.runs.filter(r => r.completed);
+                    if (completedRuns.length > 0) {
+                        const minDuration = Math.min(...completedRuns.map(r => parseFloat(r.duration)));
+                        fastestTime = formatDuration(minDuration);
+                    }
+                }
+                // Find max height across all runs
+                const maxHeight = Math.max(...data.runs.map(r => parseFloat(r.formattedHeight)));
+                let rowStyle = '';
+                if (index === 0) rowStyle = 'style="color: rgb(248, 185, 83);"';
+                else if (index === 1) rowStyle = 'style="color: rgb(165, 166, 176);"';
+                else if (index === 2) rowStyle = 'style="color: rgb(226, 123, 92);"';
+                leaderboardHTML += `
+                    <tr onclick="searchPlayerByName('${player.replace(/'/g, "\\'")}')" ${rowStyle}>
+                        <td style="width: 80px; text-align: center;">${index + 1}</td>
+                        <td style="width: 240px;">${player}</td>
+                        <td style="text-align: center;">${formatNumber(data.totalRuns)}</td>
+                        <td style="text-align: center;">${formatNumber(data.completedRuns || 0)}</td>
+                        <td>Level ${data.highestFloor} <span style="color: #FFFFFF; opacity: 0.6; font-size: 0.85em;">(${maxHeight.toFixed(1)}m)</span></td>
+                        <td style="text-align: center;">${fastestTime}</td>
+                        <td style="text-align: center;">${data.averageFloor}</td>
+                    </tr>
+                `;
+            });
+                leaderboardHTML += '</tbody></table></div>';
+            }
+            leaderboardDiv.innerHTML = leaderboardHTML;
+
+            // Most Active Players by total time
+            const topByRunsDiv = document.getElementById('mostActive');
+            if (!topByRunsDiv) {
+                console.error('mostActive div not found');
+                return;
+            }
+
+            const sortedByRuns = Object.entries(stats.playerStats)
+                .sort((a, b) => {
+                    const aTime = a[1].runs.reduce((sum, run) => sum + parseFloat(run.duration), 0);
+                    const bTime = b[1].runs.reduce((sum, run) => sum + parseFloat(run.duration), 0);
+                    return bTime - aTime;
+                });
+
+            let runLeaderboardHTML = '';
+            if (sortedByRuns.length === 0) {
+                runLeaderboardHTML = '<p style="text-align: center; color: #FFFFFF; opacity: 0.7; padding: 20px;">No players yet</p>';
+            } else {
+                runLeaderboardHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 80px; text-align: center;">Rank</th><th style="width: 240px; text-align: center;">Player</th><th style="text-align: center;">Total Runs</th><th style="text-align: center;">Total Run Time</th><th style="text-align: center;">Completions</th><th style="text-align: center;">Highest Level</th><th style="text-align: center;">Fastest Time</th><th style="text-align: center;">Avg Level</th></tr></thead><tbody>';
+            sortedByRuns.forEach(([player, data], index) => {
+                const totalTime = data.runs.reduce((sum, run) => sum + parseFloat(run.duration), 0);
+                let fastestTime = '-';
+                let fastestRun = null;
+                if (data.completedRuns > 0) {
+                    const completedRuns = data.runs.filter(r => r.completed);
+                    if (completedRuns.length > 0) {
+                        // Sort by duration to find fastest
+                        fastestRun = completedRuns.reduce((min, run) =>
+                            parseFloat(run.duration) < parseFloat(min.duration) ? run : min
+                        );
+                        // Display verifiedDuration if available, otherwise duration
+                        const displayDuration = fastestRun.verifiedDuration || fastestRun.originalDuration || fastestRun.duration;
+                        fastestTime = formatDuration(parseFloat(displayDuration));
+                    }
+                }
+                // Find max height across all runs
+                const maxHeight = Math.max(...data.runs.map(r => parseFloat(r.formattedHeight)));
+                runLeaderboardHTML += `
+                    <tr onclick="searchPlayerByName('${player.replace(/'/g, "\\\'")}')">
+                        <td style="width: 80px; text-align: center;">${index + 1}</td>
+                        <td style="width: 240px;">${player}</td>
+                        <td style="text-align: center;">${formatNumber(data.totalRuns)}</td>
+                        <td style="text-align: center;">${formatDuration(totalTime)}</td>
+                        <td style="text-align: center;">${formatNumber(data.completedRuns || 0)}</td>
+                        <td>Level ${data.highestFloor} <span style="color: #FFFFFF; opacity: 0.6; font-size: 0.85em;">(${maxHeight.toFixed(1)}m)</span></td>
+                        <td style="text-align: center;">${fastestTime}</td>
+                        <td style="text-align: center;">${data.averageFloor}</td>
+                    </tr>
+                `;
+            });
+            runLeaderboardHTML += '</tbody></table></div>';
+            }
+            topByRunsDiv.innerHTML = runLeaderboardHTML;
+
+            // Recent Runs section - merge active and completed runs
+            const recentRunsDiv = document.getElementById('recentRuns');
+            if (recentRunsDiv) {
+                const allRunsData = stats.allRuns || stats.recentRuns || [];
+
+                // Transform active runs to match completed run format
+                const transformedActiveRuns = (activeRuns || []).map(run => {
+                    const startDate = new Date(run.startedAt);
+                    const lastSeen = new Date(run.lastSeenAt);
+                    const durationSeconds = (lastSeen - startDate) / 1000;
+                    const heightInMeters = formatHeight(run.maxHeight);
+
+                    return {
+                        id: null, // No ID for active runs
+                        playerName: run.playerName,
+                        floor: calculateFloor(heightInMeters),
+                        formattedHeight: heightInMeters,
+                        duration: durationSeconds,
+                        completed: false,
+                        isActive: true,
+                        timestamp: run.startedAt,
+                        formattedDate: formatDate(run.startedAt)
+                    };
+                });
+
+                // Combine and sort - active runs first, then by ID/timestamp
+                const mergedRuns = [...transformedActiveRuns, ...allRunsData];
+                const recentRuns = mergedRuns
+                    .sort((a, b) => {
+                        // Active runs come first
+                        if (a.isActive && !b.isActive) return -1;
+                        if (!a.isActive && b.isActive) return 1;
+                        // Then sort by ID or timestamp
+                        if (a.id && b.id) return b.id - a.id;
+                        if (a.timestamp && b.timestamp) {
+                            return new Date(b.timestamp) - new Date(a.timestamp);
+                        }
+                        return 0;
+                    })
+                    .slice(0, 500);
+
+                let recentRunsHTML = '<div class="scrollable-table-container"><table class="leaderboard-table"><thead><tr><th style="width: 100px; text-align: center;">Run #</th><th style="width: 240px; text-align: center;">Player</th><th style="width: 80px; text-align: center;">Level</th><th style="width: 90px; text-align: center;">Height</th><th style="width: 120px; text-align: center;">Duration</th><th style="width: 120px; text-align: center;">Completed</th><th style="width: 180px; text-align: center;">Date Started</th></tr></thead><tbody>';
+
+                recentRuns.forEach(run => {
+                    const runNumber = run.isActive ? '-' : `#${run.id}`;
+                    const statusBadge = run.isActive
+                        ? '<span style="color: #FA9549; font-weight: bold;">Active</span>'
+                        : (run.completed ? '<span class="completed-badge">✓</span>' : '<span class="incomplete-badge">-</span>');
+
+                    recentRunsHTML += `
+                        <tr onclick="searchPlayerByName('${run.playerName.replace(/'/g, "\\\'")}')">
+                            <td style="width: 100px; text-align: center;">${runNumber}</td>
+                            <td style="width: 240px;">${run.playerName}</td>
+                            <td style="width: 80px; text-align: center;">${run.floor}</td>
+                            <td style="width: 90px; text-align: center;">${run.formattedHeight}m</td>
+                            <td style="width: 120px; text-align: center;">${formatDuration(parseFloat(run.duration))}</td>
+                            <td style="width: 120px; text-align: center;">${statusBadge}</td>
+                            <td style="width: 180px; text-align: center;">${run.formattedDate}</td>
+                        </tr>
+                    `;
+                });
+
+                recentRunsHTML += '</tbody></table></div>';
+                recentRunsDiv.innerHTML = recentRunsHTML;
+            }
+        }
+
+        // Setup autocomplete
+        document.getElementById('playerSearch').addEventListener('input', function(e) {
+            const searchValue = e.target.value.toLowerCase().trim();
+            const suggestionsDiv = document.getElementById('suggestions');
+
+            if (!searchValue || !currentStats) {
+                suggestionsDiv.innerHTML = '';
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+
+            // Find matching players (case-insensitive, substring match)
+            const matches = Object.keys(currentStats.playerStats)
+                .filter(player => player.toLowerCase().includes(searchValue))
+                .sort((a, b) => {
+                    // Prioritize matches that start with the search term
+                    const aStarts = a.toLowerCase().startsWith(searchValue);
+                    const bStarts = b.toLowerCase().startsWith(searchValue);
+                    if (aStarts && !bStarts) return -1;
+                    if (!aStarts && bStarts) return 1;
+                    return a.localeCompare(b);
+                })
+                .slice(0, 10); // Show top 10 matches
+
+            if (matches.length === 0) {
+                suggestionsDiv.innerHTML = '';
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+
+            // Display suggestions
+            let suggestionsHTML = matches.map(player => {
+                const stats = currentStats.playerStats[player];
+                return `<div class="suggestion-item" onclick="selectSuggestion('${player.replace(/'/g, "\\'")}')">
+                    <strong>${player}</strong>
+                    <span style="color: #FFFFFF; opacity: 0.7; font-size: 0.85em; margin-left: 10px;">
+                        ${stats.totalRuns} run${stats.totalRuns !== 1 ? 's' : ''} · Level ${stats.highestFloor}
+                    </span>
+                </div>`;
+            }).join('');
+
+            suggestionsDiv.innerHTML = suggestionsHTML;
+            suggestionsDiv.style.display = 'block';
+        });
+
+        // Handle Enter key
+        document.getElementById('playerSearch').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchPlayer();
+            }
+        });
+
+        // Close suggestions when clicking outside
+        document.addEventListener('click', function(e) {
+            const searchBar = document.querySelector('.search-bar');
+            if (!searchBar.contains(e.target)) {
+                document.getElementById('suggestions').style.display = 'none';
+            }
+        });
+
+        window.selectSuggestion = function(playerName) {
+            document.getElementById('playerSearch').value = playerName;
+            document.getElementById('suggestions').style.display = 'none';
+            searchPlayerByName(playerName);
+        };
+
+        window.searchPlayer = async function() {
+            const playerName = document.getElementById('playerSearch').value.trim();
+            if (!playerName) return;
+
+            document.getElementById('suggestions').style.display = 'none';
+            await searchPlayerByName(playerName);
+        };
+
+        function generateDailyRunCountChart(data) {
+            // Count runs per day
+            const dailyRunCounts = {};
+
+            data.runs.forEach(run => {
+                const date = new Date(run.timestamp);
+                const day = date.getDate();
+
+                if (!dailyRunCounts[day]) {
+                    dailyRunCounts[day] = 0;
+                }
+                dailyRunCounts[day]++;
+            });
+
+            if (Object.keys(dailyRunCounts).length === 0) {
+                return '<div style="text-align: center; color: #FFFFFF; opacity: 0.7;">No runs yet</div>';
+            }
+
+            const maxRunCount = Math.max(...Object.values(dailyRunCounts), 1);
+
+            // Show all days 1-30
+            let chartHTML = '<div class="chart-bars">';
+            for (let day = 1; day <= 30; day++) {
+                const count = dailyRunCounts[day] || 0;
+                if (count > 0) {
+                    const heightPercent = (count / maxRunCount) * 100;
+                    const minHeightPx = 25;
+                    // Scale the percentage to use the space above the minimum
+                    const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
+                    chartHTML += `
+                        <div class="chart-bar-container" onclick="showDailyRunCountDetails('${data.playerName.replace(/'/g, "\\'")}', ${day}, ${count})" title="Day ${day}: ${count} run${count !== 1 ? 's' : ''}">
+                            <div class="chart-bar" style="height: ${displayHeight}">
+                                <div class="chart-bar-value">${count}</div>
+                            </div>
+                            <div class="chart-bar-label">D${day}</div>
+                        </div>
+                    `;
+                } else {
+                    // Empty day
+                    chartHTML += `
+                        <div class="chart-bar-container">
+                            <div class="chart-bar" style="height: 0%"></div>
+                            <div class="chart-bar-label">D${day}</div>
+                        </div>
+                    `;
+                }
+            }
+            chartHTML += '</div>';
+            chartHTML += '<div style="text-align: center; margin-top: 10px; color: #FFFFFF; opacity: 0.7; font-size: 0.85em;">Number of runs completed each day of the month</div>';
+
+            return chartHTML;
+        }
+
+        window.showDailyRunCountDetails = function(playerName, day, count) {
+            if (!currentStats || !currentStats.playerStats[playerName]) return;
+
+            const playerData = currentStats.playerStats[playerName];
+            const dayRuns = playerData.runs.filter(run => {
+                const date = new Date(run.timestamp);
+                return date.getDate() === day;
+            });
+
+            if (dayRuns.length === 0) return;
+
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+
+            let runsHTML = '<div class="scrollable-table-container"><table class="runs-table"><thead><tr><th style="width: 100px; text-align: center;">Run #</th><th style="width: 80px; text-align: center;">Level</th><th style="width: 90px; text-align: center;">Height</th><th style="width: 120px; text-align: center;">Duration</th><th style="width: 120px; text-align: center;">Completed</th><th style="width: 180px; text-align: center;">Date Started</th></tr></thead><tbody>';
+            dayRuns.forEach(run => {
+                const statusBadge = run.completed ? '<span class="completed-badge">✓</span>' : '<span class="incomplete-badge">-</span>';
+                runsHTML += `
+                    <tr style="cursor: default;">
+                        <td style="width: 100px; text-align: center;">#${run.id}</td>
+                        <td style="width: 80px; text-align: center;">${run.floor}</td>
+                        <td style="width: 90px; text-align: center;">${run.formattedHeight}m</td>
+                        <td style="width: 120px; text-align: center;">${formatDuration(parseFloat(run.duration))}</td>
+                        <td style="width: 120px; text-align: center;">${statusBadge}</td>
+                        <td style="width: 180px; text-align: center;">${run.formattedDate}</td>
+                    </tr>
+                `;
+            });
+            runsHTML += '</tbody></table></div>';
+
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+                    <h2>${playerName} - Day ${day} (${count} run${count !== 1 ? 's' : ''})</h2>
+                    ${runsHTML}
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.remove();
+            });
+        };
+
+        function generateDailyProgressChart(data) {
+            // Group runs by day and find highest level reached each day
+            const dailyStats = {};
+
+            data.runs.forEach(run => {
+                const date = new Date(run.timestamp);
+                const day = date.getDate();
+
+                if (!dailyStats[day] || run.floor > dailyStats[day].floor) {
+                    dailyStats[day] = {
+                        floor: run.floor,
+                        height: run.formattedHeight,
+                        date: run.formattedDate,
+                        runId: run.id
+                    };
+                }
+            });
+
+            if (Object.keys(dailyStats).length === 0) {
+                return '<div style="text-align: center; color: #FFFFFF; opacity: 0.7;">No runs yet</div>';
+            }
+
+            const maxFloor = Math.max(...Object.values(dailyStats).map(d => d.floor), 21);
+
+            // Show all days 1-30
+            let chartHTML = '<div class="chart-bars">';
+            for (let day = 1; day <= 30; day++) {
+                const dayData = dailyStats[day];
+                if (dayData) {
+                    const heightPercent = (dayData.floor / maxFloor) * 100;
+                    const minHeightPx = 25;
+                    // Scale the percentage to use the space above the minimum
+                    const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
+                    chartHTML += `
+                        <div class="chart-bar-container" onclick="showDailyProgressDetails(${day}, '${dayData.height}', '${dayData.date}', ${dayData.floor}, ${dayData.runId})" title="Day ${day}: Level ${dayData.floor} (${dayData.height}m)">
+                            <div class="chart-bar" style="height: ${displayHeight}">
+                                <div class="chart-bar-value">${dayData.floor}</div>
+                            </div>
+                            <div class="chart-bar-label">D${day}</div>
+                        </div>
+                    `;
+                } else {
+                    // Empty day
+                    chartHTML += `
+                        <div class="chart-bar-container">
+                            <div class="chart-bar" style="height: 0%"></div>
+                            <div class="chart-bar-label">D${day}</div>
+                        </div>
+                    `;
+                }
+            }
+            chartHTML += '</div>';
+            chartHTML += '<div style="text-align: center; margin-top: 10px; color: #FFFFFF; opacity: 0.7; font-size: 0.85em;">Highest level reached each day of the month</div>';
+
+            return chartHTML;
+        }
+
+        window.showGlobalDailyRunDetails = function(day, count) {
+            if (!currentStats) return;
+
+            // Get all runs for this day (use allRuns for complete dataset)
+            const allRunsData = currentStats.allRuns || currentStats.recentRuns;
+            const dayRuns = allRunsData.filter(run => {
+                const date = new Date(run.timestamp);
+                return date.getDate() === day;
+            }).sort((a, b) => {
+                const timeA = new Date(a.timestamp).getTime();
+                const timeB = new Date(b.timestamp).getTime();
+                return timeB - timeA; // Most recent first
+            }); // Show all runs
+
+            if (dayRuns.length === 0) return;
+
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+
+            let runsHTML = '<div class="scrollable-table-container"><table class="runs-table"><thead><tr><th style="width: 100px; text-align: center;">Run #</th><th style="width: 240px; text-align: center;">Player</th><th style="width: 80px; text-align: center;">Level</th><th style="width: 90px; text-align: center;">Height</th><th style="width: 120px; text-align: center;">Duration</th><th style="width: 120px; text-align: center;">Completed</th><th style="width: 180px; text-align: center;">Date Started</th></tr></thead><tbody>';
+            dayRuns.forEach(run => {
+                const statusBadge = run.completed ? '<span class="completed-badge">✓</span>' : '<span class="incomplete-badge">-</span>';
+                runsHTML += `
+                    <tr style="cursor: default;">
+                        <td style="width: 100px; text-align: center;">#${run.id}</td>
+                        <td style="width: 240px;">${run.playerName}</td>
+                        <td style="width: 80px; text-align: center;">${run.floor}</td>
+                        <td style="width: 90px; text-align: center;">${run.formattedHeight}m</td>
+                        <td style="width: 120px; text-align: center;">${formatDuration(parseFloat(run.duration))}</td>
+                        <td style="width: 120px; text-align: center;">${statusBadge}</td>
+                        <td style="width: 180px; text-align: center;">${run.formattedDate}</td>
+                    </tr>
+                `;
+            });
+            runsHTML += '</tbody></table></div>';
+
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 1100px;">
+                    <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+                    <h2>Day ${day} - ${count} Run${count !== 1 ? 's' : ''}</h2>
+                    ${runsHTML}
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.remove();
+            });
+        };
+
+        window.showDailyProgressDetails = function(day, height, date, floor, runId) {
+            if (!currentStats || !currentStats.playerStats) return;
+
+            // Find the run to get duration
+            let runDuration = null;
+            for (const playerName in currentStats.playerStats) {
+                const run = currentStats.playerStats[playerName].runs.find(r => r.id === runId);
+                if (run) {
+                    runDuration = formatDuration(parseFloat(run.duration));
+                    break;
+                }
+            }
+
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+                    <h2>Day ${day} - Highest Level ${floor}</h2>
+                    <div style="padding: 20px; text-align: center;">
+                        <p style="font-size: 1.2em; margin: 10px 0;"><strong>Level:</strong> ${floor}</p>
+                        <p style="font-size: 1.2em; margin: 10px 0;"><strong>Height:</strong> ${height}m</p>
+                        <p style="font-size: 1.2em; margin: 10px 0;"><strong>Duration:</strong> ${runDuration || 'N/A'}</p>
+                        <p style="font-size: 1.2em; margin: 10px 0;"><strong>Date:</strong> ${date}</p>
+                        <p style="font-size: 1.2em; margin: 10px 0;"><strong>Run ID:</strong> #${runId}</p>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.remove();
+            });
+        };
+
+        window.searchPlayerByName = async function(playerName) {
+            document.getElementById('playerSearch').value = playerName;
+
+            if (!currentStats || !currentStats.playerStats) {
+                document.getElementById('playerResult').innerHTML =
+                    '<div class="error">Data not loaded yet</div>';
+                return;
+            }
+
+            let playerData = currentStats.playerStats[playerName];
+
+            if (!playerData) {
+                // Try case-insensitive search
+                const matchingPlayer = Object.keys(currentStats.playerStats).find(
+                    p => p.toLowerCase() === playerName.toLowerCase()
+                );
+
+                if (matchingPlayer) {
+                    playerName = matchingPlayer;
+                    playerData = currentStats.playerStats[matchingPlayer];
+                } else {
+                    document.getElementById('playerResult').innerHTML =
+                        '<div class="error">Player not found</div>';
+                    return;
+                }
+            }
+
+            const activeRuns = cachedActiveRuns;
+
+            // Add active runs for this player to their run list
+            const playerActiveRuns = (activeRuns || [])
+                .filter(run => run.playerName === playerName)
+                .map(run => {
+                    const startDate = new Date(run.startedAt);
+                    const lastSeen = new Date(run.lastSeenAt);
+                    const durationSeconds = (lastSeen - startDate) / 1000;
+                    const heightInMeters = formatHeight(run.maxHeight);
+
+                    return {
+                        id: null,
+                        playerName: run.playerName,
+                        floor: calculateFloor(heightInMeters),
+                        formattedHeight: heightInMeters,
+                        duration: durationSeconds,
+                        completed: false,
+                        isActive: true,
+                        timestamp: run.startedAt,
+                        formattedDate: formatDate(run.startedAt)
+                    };
+                });
+
+            // Create a copy with active runs
+            const playerDataWithActive = {
+                playerName,
+                ...playerData,
+                runs: playerActiveRuns.length > 0 ? [...playerActiveRuns, ...playerData.runs] : [...playerData.runs]
+            };
+
+            displayPlayerData(playerDataWithActive);
+        };
+
+        function displayPlayerData(data) {
+            const resultDiv = document.getElementById('playerResult');
+
+            // Generate floor distribution chart for this player
+            const playerFloorStats = {};
+            for (let i = 0; i <= 21; i++) playerFloorStats[i] = 0;
+            data.runs.forEach(run => {
+                playerFloorStats[run.floor] = (playerFloorStats[run.floor] || 0) + 1;
+            });
+
+            const maxPlayerRuns = Math.max(...Object.values(playerFloorStats), 1);
+
+            let playerChartHTML = '<div class="chart-bars">';
+            for (let floor = 0; floor <= 21; floor++) {
+                const count = playerFloorStats[floor] || 0;
+                const heightPercent = maxPlayerRuns > 0 ? (count / maxPlayerRuns) * 100 : 0;
+
+                if (count > 0) {
+                    const minHeightPx = 25;
+                    // Scale the percentage to use the space above the minimum
+                    const displayHeight = `calc(((100% - ${minHeightPx}px) * ${heightPercent / 100}) + ${minHeightPx}px)`;
+                    playerChartHTML += `
+                        <div class="chart-bar-container" onclick="showPlayerFloorDetails('${data.playerName.replace(/'/g, "\\'" ).replace(/"/g, '&quot;')}', ${floor})" title="Level ${floor}: ${count} run${count !== 1 ? 's' : ''}">
+                            <div class="chart-bar" style="height: ${displayHeight}">
+                                <div class="chart-bar-value">${count}</div>
+                            </div>
+                            <div class="chart-bar-label">L${floor}</div>
+                        </div>
+                    `;
+                } else {
+                    playerChartHTML += `
+                        <div class="chart-bar-container">
+                            <div class="chart-bar" style="height: 0%"></div>
+                            <div class="chart-bar-label">L${floor}</div>
+                        </div>
+                    `;
+                }
+            }
+            playerChartHTML += '</div>';
+            playerChartHTML += '<div style="text-align: center; margin-top: 10px; color: #FFFFFF; opacity: 0.7; font-size: 0.85em;">Number of runs completed on each level</div>';
+            let html = `
+                <div class="player-card">
+                    <div class="player-card-header">
+                        <h3>${data.playerName}</h3>
+                        <button class="close-player-btn" onclick="document.getElementById('playerResult').innerHTML = ''">✕</button>
+                    </div>
+                    <div class="player-stats">
+                        <div class="player-stat stat-narrow">
+                            <span class="label">Total Runs:</span>
+                            <span class="value">${formatNumber(data.totalRuns)}</span>
+                        </div>
+                        <div class="player-stat stat-narrow">
+                            <span class="label">Completed:</span>
+                            <span class="value">${formatNumber(data.completedRuns || 0)}</span>
+                        </div>
+                        <div class="player-stat">
+                            <span class="label">Highest Level:</span>
+                            <span class="value">Level ${data.highestFloor} <span style="color: #FFFFFF; opacity: 0.6; font-size: 0.85em;">(${Math.max(...data.runs.map(r => parseFloat(r.formattedHeight))).toFixed(1)}m)</span></span>
+                        </div>
+                        ${data.completedRuns > 0 ? `
+                        <div class="player-stat">
+                            <span class="label">Fastest Time:</span>
+                            <span class="value">${(() => {
+                                const completedRuns = data.runs.filter(r => r.completed);
+                                const fastestRun = completedRuns.reduce((min, run) =>
+                                    parseFloat(run.duration) < parseFloat(min.duration) ? run : min
+                                );
+                                const displayDuration = fastestRun.verifiedDuration || fastestRun.originalDuration || fastestRun.duration;
+                                return formatDuration(parseFloat(displayDuration));
+                            })()}</span>
+                        </div>
+                        <div class="player-stat">
+                            <span class="label">Average Level:</span>
+                            <span class="value">${data.averageFloor}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                    <h4>Runs by Highest Level Reached</h4>
+                    <div class="chart-container" style="margin: 20px 0;">
+                        ${playerChartHTML}
+                    </div>
+                    <h4>Daily Run Count</h4>
+                    <div class="chart-container" style="margin: 20px 0;">
+                        ${generateDailyRunCountChart(data)}
+                    </div>
+                    <h4>Highest Level Reached by Day</h4>
+                    <div class="chart-container" style="margin: 20px 0;">
+                        ${generateDailyProgressChart(data)}
+                    </div>
+                    <h4>All Runs (${data.runs.length})</h4>
+                    <div class="scrollable-table-container">
+                        <table class="runs-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 100px; text-align: center;">Run #</th>
+                                    <th style="width: 80px; text-align: center;">Level</th>
+                                    <th style="width: 90px; text-align: center;">Height</th>
+                                    <th style="width: 120px; text-align: center;">Duration</th>
+                                    <th style="width: 120px; text-align: center;">Completed</th>
+                                    <th style="width: 180px; text-align: center;">Date Started</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+
+            data.runs.forEach((run, index) => {
+                const runNumber = run.isActive ? '-' : `#${run.id}`;
+                const statusBadge = run.isActive
+                    ? '<span style="color: #FA9549; font-weight: bold;">Active</span>'
+                    : (run.completed ? '<span class="completed-badge">✓</span>' : '<span class="incomplete-badge">-</span>');
+                html += `
+                    <tr style="cursor: default;">
+                        <td style="width: 100px; text-align: center;">${runNumber}</td>
+                        <td style="width: 80px; text-align: center;">${run.floor}</td>
+                        <td style="width: 90px; text-align: center;">${run.formattedHeight}m</td>
+                        <td style="width: 120px; text-align: center;">${formatDuration(parseFloat(run.duration))}</td>
+                        <td style="width: 120px; text-align: center;">${statusBadge}</td>
+                        <td style="width: 180px; text-align: center;">${run.formattedDate}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table></div></div>';
+            resultDiv.innerHTML = html;
+
+            // Only scroll if the element is not already visible
+            setTimeout(() => {
+                const rect = resultDiv.getBoundingClientRect();
+                const isVisible = rect.top >= 0 && rect.top <= window.innerHeight;
+
+                if (!isVisible) {
+                    resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 50);
+        }
+
+        window.showPlayerFloorDetails = function(playerName, floorNumber) {
+            if (!currentStats || !currentStats.playerStats[playerName]) return;
+
+            const playerData = currentStats.playerStats[playerName];
+            const floorRuns = playerData.runs.filter(run => run.floor === floorNumber);
+
+            if (floorRuns.length === 0) return;
+
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 1100px;">
+                    <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+                    <h2>${playerName} - Level ${floorNumber} (${floorRuns.length} run${floorRuns.length !== 1 ? 's' : ''})</h2>
+                    <div class="scrollable-table-container">
+                        <table class="runs-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 100px; text-align: center;">Run #</th>
+                                    <th style="width: 90px; text-align: center;">Height</th>
+                                    <th style="width: 120px; text-align: center;">Duration</th>
+                                    <th style="width: 120px; text-align: center;">Completed</th>
+                                    <th style="width: 180px; text-align: center;">Date Started</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${floorRuns.map(run => {
+                                    const statusBadge = run.completed ? '<span class="completed-badge">✓</span>' : '<span class="incomplete-badge">-</span>';
+                                    return `
+                                    <tr style="cursor: default;">
+                                        <td style="width: 100px; text-align: center;">#${run.id}</td>
+                                        <td style="width: 90px; text-align: center;">${run.formattedHeight}m</td>
+                                        <td style="width: 120px; text-align: center;">${formatDuration(parseFloat(run.duration))}</td>
+                                        <td style="width: 120px; text-align: center;">${statusBadge}</td>
+                                        <td style="width: 180px; text-align: center;">${run.formattedDate}</td>
+                                    </tr>
+                                `}).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.remove();
+            });
+        };
+
+        window.showFloorDetails = async function(floorNumber) {
+            if (!currentStats || !currentStats.playerStats) {
+                console.error('Stats not loaded yet');
+                return;
+            }
+
+            // Use cached data if available
+            let floorData;
+            if (floorDataCache[floorNumber]) {
+                floorData = floorDataCache[floorNumber];
+            } else {
+                // Build floor data from current stats
+                const floorRuns = [];
+                Object.entries(currentStats.playerStats).forEach(([playerName, playerData]) => {
+                    playerData.runs.forEach(run => {
+                        if (run.floor === floorNumber) {
+                            floorRuns.push({
+                                playerName,
+                                ...run
+                            });
+                        }
+                    });
+                });
+
+                floorRuns.sort((a, b) => {
+                    const timeA = new Date(a.timestamp).getTime() || 0;
+                    const timeB = new Date(b.timestamp).getTime() || 0;
+                    return timeB - timeA;
+                });
+
+                floorData = {
+                    floor: floorNumber,
+                    totalRuns: currentStats.floorStats[floorNumber] || 0,
+                    runs: floorRuns
+                };
+
+                floorDataCache[floorNumber] = floorData;
+            }
+
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+                    <h2>Level ${floorNumber} - ${formatNumber(floorData.totalRuns)} Runs</h2>
+                    <div class="scrollable-table-container">
+                        <table class="runs-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 100px; text-align: center;">Run #</th>
+                                    <th style="width: 240px; text-align: center;">Player</th>
+                                    <th style="width: 90px; text-align: center;">Height</th>
+                                    <th style="width: 120px; text-align: center;">Duration</th>
+                                    <th style="width: 120px; text-align: center;">Completed</th>
+                                    <th style="width: 180px; text-align: center;">Date Started</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${floorData.runs.map(run => {
+                                    const statusBadge = run.completed ? '<span class="completed-badge">✓</span>' : '<span class="incomplete-badge">-</span>';
+                                    return `
+                                    <tr style="cursor: default;">
+                                        <td style="width: 100px; text-align: center;">#${run.id}</td>
+                                        <td style="width: 240px;">${run.playerName}</td>
+                                        <td style="width: 90px; text-align: center;">${run.formattedHeight}m</td>
+                                        <td style="width: 120px; text-align: center;">${formatDuration(parseFloat(run.duration))}</td>
+                                        <td style="width: 120px; text-align: center;">${statusBadge}</td>
+                                        <td style="width: 180px; text-align: center;">${run.formattedDate}</td>
+                                    </tr>
+                                `}).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.remove();
+            });
+        };
+
+        // Handle Enter key in search
+        document.getElementById('playerSearch').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                searchPlayer();
+            }
+        });
+
+        // Function to check and update scrollbar state for all tables
+        function updateScrollbarState() {
+            // Check all scrollable table containers
+            document.querySelectorAll('.scrollable-table-container tbody').forEach(tbody => {
+                const hasScrollbar = tbody.scrollHeight > tbody.clientHeight;
+                const thead = tbody.parentElement.querySelector('thead');
+                if (thead) {
+                    if (hasScrollbar) {
+                        thead.classList.add('has-scrollbar');
+                    } else {
+                        thead.classList.remove('has-scrollbar');
+                    }
+                }
+            });
+
+            // Check modal tables
+            document.querySelectorAll('.modal-content table.runs-table tbody').forEach(tbody => {
+                const hasScrollbar = tbody.scrollHeight > tbody.clientHeight;
+                const thead = tbody.parentElement.querySelector('thead');
+                if (thead) {
+                    if (hasScrollbar) {
+                        thead.classList.add('has-scrollbar');
+                    } else {
+                        thead.classList.remove('has-scrollbar');
+                    }
+                }
+            });
+        }
+
+        // Call after content loads and on window resize
+        window.addEventListener('resize', updateScrollbarState);
+
+        // Create a MutationObserver to watch for DOM changes (new tables added)
+        const observer = new MutationObserver(() => {
+            updateScrollbarState();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // Load stats on page load
+        loadStats().then(() => {
+            // Check scrollbar state after stats load
+            setTimeout(updateScrollbarState, 100);
+        });
+    </script>
+</body>
+</html>
