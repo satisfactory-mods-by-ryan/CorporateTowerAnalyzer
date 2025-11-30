@@ -32,7 +32,7 @@ export function calculateFloor(height) {
             return i + 1;
         }
     }
-    return 0;
+    return 1;
 }
 
 export function formatDate(iso) {

@@ -318,7 +318,7 @@
             const maxRuns = Math.max(...Object.values(stats.floorStats), 1);
 
             // Show all levels from 0 to 21
-            for (let floor = 0; floor <= 21; floor++) {
+            for (let floor = 1; floor <= 21; floor++) {
                 const count = stats.floorStats[floor] || 0;
                 const heightPercent = maxRuns > 0 ? (count / maxRuns) * 100 : 0;
                 const minHeightPx = 25; // Minimum height in pixels for visibility
@@ -1068,7 +1068,7 @@
             const maxPlayerRuns = Math.max(...Object.values(playerFloorStats), 1);
 
             let playerChartHTML = '<div class="chart-bars">';
-            for (let floor = 0; floor <= 21; floor++) {
+            for (let floor = 1; floor <= 21; floor++) {
                 const count = playerFloorStats[floor] || 0;
                 const heightPercent = maxPlayerRuns > 0 ? (count / maxPlayerRuns) * 100 : 0;
 
