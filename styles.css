@@ -38,8 +38,8 @@ body:not(.loading) .container {
 
 header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     margin-bottom: 30px;
     padding-bottom: 20px;
     border-bottom: 2px solid #5D5D5D;
@@ -49,6 +49,14 @@ h1 {
     color: #FA9549;
     font-size: 2.5em;
     font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.data-timestamp {
+    color: #FFFFFF;
+    opacity: 0.7;
+    font-size: 0.95em;
+    margin: 0;
 }
 
 h2 {
@@ -325,6 +333,17 @@ h2 {
     background: #4a4a4a;
 }
 
+/* Remove hover effect and pointer cursor from non-clickable rows */
+.leaderboard-table tbody tr[style*="cursor: default"],
+.runs-table tbody tr[style*="cursor: default"] {
+    cursor: default !important;
+}
+
+.leaderboard-table tbody tr[style*="cursor: default"]:hover,
+.runs-table tbody tr[style*="cursor: default"]:hover {
+    background: transparent !important;
+}
+
 .player-card {
     background: #2a2a2a;
     border: 1px solid #5D5D5D;
@@ -508,10 +527,21 @@ h2 {
     overflow-y: hidden;
 }
 
+/* Override for main leaderboard - allow natural height */
+.leaderboard-section .scrollable-table-container {
+    overflow-y: visible;
+}
+
 .scrollable-table-container .leaderboard-table {
     display: block;
-    max-height: 80vh;
+    max-height: 90vh;
     min-width: 970px;
+}
+
+/* Override for main leaderboard - no internal scroll */
+.leaderboard-section .scrollable-table-container .leaderboard-table {
+    display: table;
+    max-height: none;
 }
 
 .scrollable-table-container .runs-table {
@@ -528,6 +558,12 @@ h2 {
     position: sticky;
     top: 0;
     z-index: 10;
+}
+
+/* Override for main leaderboard - normal table display */
+.leaderboard-section .scrollable-table-container .leaderboard-table thead {
+    display: table-header-group;
+    width: auto;
 }
 
 /* Extend header background over scrollbar area - only shown when scrollbar present */
@@ -551,9 +587,17 @@ h2 {
 
 .scrollable-table-container .leaderboard-table tbody {
     display: block;
-    max-height: calc(80vh - 48px);
+    max-height: calc(90vh - 48px);
     overflow-y: auto;
     overflow-x: hidden;
+}
+
+/* Override for main leaderboard - no internal scroll */
+.leaderboard-section .scrollable-table-container .leaderboard-table tbody {
+    display: table-row-group;
+    max-height: none;
+    overflow-y: visible;
+    overflow-x: visible;
 }
 
 .scrollable-table-container .runs-table tbody {
@@ -568,6 +612,12 @@ h2 {
     display: table;
     width: 100%;
     table-layout: fixed;
+}
+
+/* Override for main leaderboard - normal table row display */
+.leaderboard-section .scrollable-table-container .leaderboard-table tr {
+    display: table-row;
+    width: auto;
 }
 
 /* Sticky table headers for scrollable containers */
